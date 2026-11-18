@@ -1,5 +1,5 @@
 // ประกอบข้อความแจ้งเตือนแบบ Components V2 (การ์ดมีแบนเนอร์ + ปุ่ม)
-import { formatDays, type AdRow } from './schedule';
+import { formatDays, InputError, type AdRow } from './schedule';
 
 export const IS_COMPONENTS_V2 = 1 << 15;
 export const EPHEMERAL = 1 << 6;
@@ -79,10 +79,9 @@ export function buildReminderMessage(r: ReminderView, slot: Slot, ad: AdRow | nu
   const buttons = [];
   if (isHttpUrl(settings.donate_url)) buttons.push(linkButton('Donate', settings.donate_url, '💖'));
   if (isHttpUrl(settings.contact_url)) buttons.push(linkButton('ติดต่อ', settings.contact_url, '📩'));
-  if (buttons.length) {
-    inner.push({ type: SEPARATOR, divider: true, spacing: 1 });
-    inner.push({ type: ACTION_ROW, components: buttons });
-  }
+  buttons.push(HELP_BUTTON);
+  inner.push({ type: SEPARATOR, divider: true, spacing: 1 });
+  inner.push({ type: ACTION_ROW, components: buttons });
 
   if (ad) {
     inner.push({ type: SEPARATOR, divider: true, spacing: 1 });
@@ -104,13 +103,101 @@ export function buildReminderMessage(r: ReminderView, slot: Slot, ad: AdRow | nu
   };
 }
 
-/** เด้งเฉพาะคน/role ที่ตั้งให้ @ — "ตั้งโดย <@…>" ในการ์ดไม่เด้ง */
+export const MAX_TAGS = 10;
+
+/**
+ * ดึงคน/ยศที่จะแท็กจากข้อความ เช่น "<@&123> <@456> @everyone"
+ * คืนเป็นข้อความมาตรฐานคั่นด้วยช่องว่าง (ตัดซ้ำ) หรือ null ถ้าไม่มี
+ */
+export function normalizeTags(...inputs: (string | null | undefined)[]): string | null {
+  const out: string[] = [];
+  for (const input of inputs) {
+    if (!input) continue;
+    for (const m of input.matchAll(/<@&(\d+)>|<@!?(\d+)>|@(everyone|here)\b/g)) {
+      const tag = m[1] ? `<@&${m[1]}>` : m[2] ? `<@${m[2]}>` : `@${m[3]}`;
+      if (!out.includes(tag)) out.push(tag);
+    }
+  }
+  if (out.length > MAX_TAGS) throw new InputError(`แท็กได้ไม่เกิน ${MAX_TAGS} คน/ยศ`);
+  return out.length ? out.join(' ') : null;
+}
+
+/** เด้งเฉพาะคน/ยศที่ตั้งให้แท็ก — "ตั้งโดย <@…>" ในการ์ดไม่เด้ง */
 export function allowedMentions(mention: string | null) {
-  if (!mention) return { parse: [] };
-  if (mention === '@everyone' || mention === '@here') return { parse: ['everyone'] };
-  const role = /^<@&(\d+)>$/.exec(mention);
-  if (role) return { parse: [], roles: [role[1]] };
-  const user = /^<@!?(\d+)>$/.exec(mention);
-  if (user) return { parse: [], users: [user[1]] };
-  return { parse: [] };
+  const roles: string[] = [];
+  const users: string[] = [];
+  const parse: string[] = [];
+  for (const m of (mention ?? '').matchAll(/<@&(\d+)>|<@!?(\d+)>|@(everyone|here)\b/g)) {
+    if (m[1]) roles.push(m[1]);
+    else if (m[2]) users.push(m[2]);
+    else if (!parse.includes('everyone')) parse.push('everyone');
+  }
+  return { parse, ...(roles.length ? { roles } : {}), ...(users.length ? { users } : {}) };
+}
+
+// ---------- ปุ่มและกล่อง "วิธีใช้" ----------
+
+export const HELP_CUSTOM_ID = 'kk:help';
+
+const HELP_BUTTON = { type: BUTTON, style: 2, label: 'คำสั่ง & วิธีใช้', custom_id: HELP_CUSTOM_ID, emoji: { name: '📖' } };
+
+/** กล่องสอนการใช้งาน (เห็นคนเดียว) — ใช้ทั้งตอนกดปุ่มและ /remind help */
+export function buildHelpMessage(settings: BotSettings) {
+  const inner: unknown[] = [
+    { type: TEXT, content: '## 📖 วิธีใช้ knock-knock\nบอทแจ้งเตือนประจำวัน ตั้งเวลา จำนวนรอบ วันที่ซ้ำ และแท็กคน/ยศได้' },
+    { type: SEPARATOR, divider: true, spacing: 1 },
+    {
+      type: TEXT,
+      content: [
+        '### ➕ ตั้งแจ้งเตือน',
+        '`/remind add` แล้วกรอกช่องต่อไปนี้',
+        '• **title** เรื่องที่จะเตือน *(ต้องใส่)*',
+        '• **times** เวลา คั่นด้วยจุลภาค เช่น `09:00,13:00,17:00`',
+        '• หรือ **start** + **every** + **rounds** เช่น เริ่ม `08:00` ทุก `120` นาที `4` รอบ',
+        '• **days** วันที่ซ้ำ: `ทุกวัน` · `จ-ศ` · `ส-อา` · `จ,พ,ศ` *(เว้นว่าง = ทุกวัน)*',
+        '• **message** ข้อความในกล่อง',
+        '• **channel** ห้องที่จะส่ง *(เว้นว่าง = ห้องนี้)*',
+        '• **tag** คน/ยศที่จะแท็ก พิมพ์ `@` แล้วเลือกได้หลายอัน เช่น `@ทีมงาน @ยูมี่` หรือ `@everyone`',
+      ].join('\n'),
+    },
+    {
+      type: TEXT,
+      content: [
+        '**ตัวอย่าง**',
+        '```',
+        '/remind add title:ส่งรายงาน times:09:00,17:00 days:จ-ศ message:อย่าลืมส่งก่อนเลิกงาน tag:@ทีมงาน',
+        '```',
+      ].join('\n'),
+    },
+    { type: SEPARATOR, divider: true, spacing: 1 },
+    {
+      type: TEXT,
+      content: [
+        '### 🛠️ จัดการ',
+        '`/remind list` ดูทั้งหมด พร้อมเลข id',
+        '`/remind tag id tag` เปลี่ยนคน/ยศที่แท็ก *(เว้น tag ว่าง = ไม่แท็กใคร)*',
+        '`/remind test id` ส่งให้ดูทันที 1 ครั้ง',
+        '`/remind pause id` · `/remind resume id` พัก / เปิดต่อ',
+        '`/remind remove id` ลบ',
+        '`/remind timezone zone` เขตเวลาของเซิร์ฟ *(ค่าเริ่มต้น Asia/Bangkok)*',
+      ].join('\n'),
+    },
+    {
+      type: TEXT,
+      content:
+        '-# คำสั่ง /remind ใช้ได้เฉพาะคนที่มีสิทธิ์ Manage Server — แอดมินเปิดให้ยศอื่นได้ที่ Server Settings › Integrations › knock-knock\n' +
+        '-# บอทต้องมีสิทธิ์ View Channel + Send Messages ในห้องที่ส่ง',
+    },
+  ];
+
+  const links = [];
+  if (isHttpUrl(settings.donate_url)) links.push(linkButton('Donate', settings.donate_url, '💖'));
+  if (isHttpUrl(settings.contact_url)) links.push(linkButton('ติดต่อ', settings.contact_url, '📩'));
+  if (links.length) inner.push({ type: ACTION_ROW, components: links });
+
+  return {
+    flags: IS_COMPONENTS_V2 | EPHEMERAL,
+    components: [{ type: CONTAINER, accent_color: accent(settings), components: inner }],
+    allowed_mentions: { parse: [] },
+  };
 }

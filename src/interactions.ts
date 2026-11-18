@@ -1,7 +1,14 @@
 // จัดการคำสั่ง slash ที่ Discord ส่งมา
 import { guildTimezone, loadAds, loadSettings, type ReminderRow } from './db';
 import { sendChannelMessage, type Env } from './discord';
-import { buildReminderMessage, EPHEMERAL, IS_COMPONENTS_V2 } from './message';
+import {
+  buildHelpMessage,
+  buildReminderMessage,
+  EPHEMERAL,
+  HELP_CUSTOM_ID,
+  IS_COMPONENTS_V2,
+  normalizeTags,
+} from './message';
 import {
   buildTimes,
   formatDays,
@@ -16,6 +23,7 @@ import {
 
 const PING = 1;
 const APPLICATION_COMMAND = 2;
+const MESSAGE_COMPONENT = 3;
 const PONG = 1;
 const REPLY = 4;
 
@@ -36,8 +44,8 @@ interface Interaction {
   user?: { id: string };
   data?: {
     name: string;
+    custom_id?: string;
     options?: Option[];
-    resolved?: { roles?: Record<string, unknown>; users?: Record<string, unknown> };
   };
 }
 
@@ -52,6 +60,13 @@ class UserError extends Error {}
 
 export async function handleInteraction(env: Env, i: Interaction): Promise<Json> {
   if (i.type === PING) return { type: PONG };
+
+  // กดปุ่ม "คำสั่ง & วิธีใช้" บนการ์ด → กล่องสอนใช้งาน (เห็นคนเดียว)
+  if (i.type === MESSAGE_COMPONENT) {
+    if (i.data?.custom_id === HELP_CUSTOM_ID) return helpReply(env);
+    return reply('ปุ่มนี้ใช้ไม่ได้แล้ว');
+  }
+
   if (i.type !== APPLICATION_COMMAND || !i.data) return reply('ไม่รองรับคำสั่งนี้');
 
   const sub = i.data.options?.[0];
@@ -81,14 +96,12 @@ async function getReminder(env: Env, guildId: string, id: unknown): Promise<Remi
   return row;
 }
 
-function resolveMention(i: Interaction, id: unknown): string | null {
-  if (typeof id !== 'string' || !id) return null;
-  if (id === i.guild_id) return '@everyone'; // role @everyone มี id เท่ากับเซิร์ฟ
-  if (i.data?.resolved?.roles?.[id]) return `<@&${id}>`;
-  return `<@${id}>`;
+async function helpReply(env: Env): Promise<Json> {
+  return { type: REPLY, data: buildHelpMessage(await loadSettings(env.DB)) };
 }
 
 async function remind(env: Env, i: Interaction, sub: string, o: Record<string, string | number | undefined>): Promise<Json> {
+  if (sub === 'help') return helpReply(env);
   const guildId = i.guild_id;
   if (!guildId) throw new UserError('ใช้ได้ในเซิร์ฟเวอร์เท่านั้น');
 
@@ -117,7 +130,7 @@ async function remind(env: Env, i: Interaction, sub: string, o: Record<string, s
         throw new UserError(`เซิร์ฟนี้ตั้งได้สูงสุด ${MAX_REMINDERS_PER_GUILD} รายการ ลบอันเก่าก่อนนะ`);
       }
 
-      const mention = resolveMention(i, o.mention);
+      const mention = normalizeTags(str(o.tag));
       const res = await env.DB.batch([
         env.DB.prepare('INSERT OR IGNORE INTO guilds (guild_id) VALUES (?)').bind(guildId),
         env.DB.prepare(
@@ -131,7 +144,8 @@ async function remind(env: Env, i: Interaction, sub: string, o: Record<string, s
         [
           `✅ ตั้งแจ้งเตือน **#${id} ${title}** แล้ว`,
           `⏰ ${times.join(', ')} (${times.length} รอบ/วัน · ${tz})`,
-          `📅 ${formatDays(days)} · ส่งที่ <#${channelId}>${mention ? ` · @ ${mention}` : ''}`,
+          `📅 ${formatDays(days)} · ส่งที่ <#${channelId}>`,
+          `🏷️ แท็ก: ${mention ?? 'ไม่แท็กใคร'}`,
           `-# ลอง \`/remind test id:${id}\` เพื่อเช็กว่าบอทส่งในห้องนั้นได้`,
         ].join('\n'),
       );
@@ -146,9 +160,17 @@ async function remind(env: Env, i: Interaction, sub: string, o: Record<string, s
       const lines = results.map((r) => {
         const state = r.active ? '🟢' : '⏸️';
         const err = r.last_error ? `\n   ⚠️ ${r.last_error.slice(0, 120)}` : '';
-        return `${state} **#${r.id} ${r.title}** · ${JSON.parse(r.times).join(', ')} · ${formatDays(r.days)} · <#${r.channel_id}>${err}`;
+        const tags = r.mention ? ` · 🏷️ ${r.mention}` : '';
+        return `${state} **#${r.id} ${r.title}** · ${JSON.parse(r.times).join(', ')} · ${formatDays(r.days)} · <#${r.channel_id}>${tags}${err}`;
       });
       return reply(clipLines([`เขตเวลา: ${tz}`, ...lines]));
+    }
+
+    case 'tag': {
+      const r = await getReminder(env, guildId, o.id);
+      const mention = normalizeTags(str(o.tag));
+      await env.DB.prepare('UPDATE reminders SET mention = ? WHERE id = ?').bind(mention, r.id).run();
+      return reply(`🏷️ #${r.id} ${r.title} — แท็ก: ${mention ?? 'ไม่แท็กใคร'}`);
     }
 
     case 'remove': {

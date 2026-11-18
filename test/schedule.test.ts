@@ -13,7 +13,7 @@ import {
   sqliteUtcToMs,
   type AdRow,
 } from '../src/schedule';
-import { allowedMentions, buildReminderMessage } from '../src/message';
+import { allowedMentions, buildHelpMessage, buildReminderMessage, HELP_CUSTOM_ID, normalizeTags } from '../src/message';
 
 describe('parseDays', () => {
   it('รับค่าลัด', () => {
@@ -107,6 +107,24 @@ describe('message', () => {
     expect(allowedMentions(null)).toEqual({ parse: [] });
     expect(allowedMentions('<@&123>')).toEqual({ parse: [], roles: ['123'] });
     expect(allowedMentions('@everyone')).toEqual({ parse: ['everyone'] });
+    expect(allowedMentions('<@&1> <@2> <@&3> @here')).toEqual({ parse: ['everyone'], roles: ['1', '3'], users: ['2'] });
+  });
+  it('normalizeTags รับหลายคน/ยศ ตัดซ้ำ ข้ามข้อความอื่น', () => {
+    expect(normalizeTags('')).toBeNull();
+    expect(normalizeTags('<@&1>  <@!2> ทีมงาน <@&1> @everyone')).toBe('<@&1> <@2> @everyone');
+    expect(() => normalizeTags(Array.from({ length: 11 }, (_, i) => `<@${i}>`).join(' '))).toThrow('ไม่เกิน');
+  });
+  it('การ์ดมีปุ่มวิธีใช้เสมอ และกล่องวิธีใช้เห็นคนเดียว', () => {
+    const msg = buildReminderMessage(
+      { title: 't', message: null, days: WEEKDAYS, mention: null, created_by: '1' },
+      { hm: '09:00', round: 1, total: 1 },
+      null,
+      {},
+    );
+    expect(JSON.stringify(msg)).toContain(HELP_CUSTOM_ID);
+    const help = buildHelpMessage({});
+    expect(help.flags & (1 << 6)).toBeTruthy();
+    expect(JSON.stringify(help)).toContain('/remind add');
   });
   it('การ์ดมีแบนเนอร์ + ปุ่ม Donate/ติดต่อ', () => {
     const msg = buildReminderMessage(

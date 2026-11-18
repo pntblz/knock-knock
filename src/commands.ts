@@ -4,7 +4,6 @@
 const STRING = 3;
 const INTEGER = 4;
 const CHANNEL = 7;
-const MENTIONABLE = 9;
 const SUB = 1;
 
 const MANAGE_GUILD = String(1 << 5);
@@ -31,9 +30,16 @@ export const REMIND_COMMAND = {
         { type: STRING, name: 'days', description: 'วันที่ซ้ำ: ทุกวัน · จ-ศ · ส-อา · จ,พ,ศ (ค่าเริ่มต้น ทุกวัน)' },
         { type: STRING, name: 'message', description: 'ข้อความในกล่อง', max_length: 1500 },
         { type: CHANNEL, name: 'channel', description: 'ห้องที่จะส่ง (ค่าเริ่มต้น ห้องนี้)', channel_types: [0, 5] },
-        { type: MENTIONABLE, name: 'mention', description: 'จะ @ ใครหรือ role ไหน' },
+        { type: STRING, name: 'tag', description: 'แท็กคน/ยศ พิมพ์ @ แล้วเลือกได้หลายอัน เช่น @ทีมงาน @ยูมี่ หรือ @everyone' },
       ],
     },
+    {
+      type: SUB,
+      name: 'tag',
+      description: 'เปลี่ยนคน/ยศที่แท็กของแจ้งเตือน',
+      options: [idOption, { type: STRING, name: 'tag', description: 'พิมพ์ @ แล้วเลือกได้หลายอัน (เว้นว่าง = ไม่แท็กใคร)' }],
+    },
+    { type: SUB, name: 'help', description: 'วิธีใช้และคำสั่งทั้งหมด' },
     { type: SUB, name: 'list', description: 'ดูแจ้งเตือนทั้งหมดของเซิร์ฟนี้' },
     { type: SUB, name: 'remove', description: 'ลบแจ้งเตือน', options: [idOption] },
     { type: SUB, name: 'pause', description: 'พักแจ้งเตือน', options: [idOption] },
