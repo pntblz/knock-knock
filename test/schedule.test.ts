@@ -136,9 +136,10 @@ describe('message', () => {
     expect(msg.flags).toBe(1 << 15);
     const json = JSON.stringify(msg);
     expect(json).toContain('https://x/a.png');
-    expect(json).toContain('รอบ 2/3');
+    expect(json).toContain('`2/3`');
+    expect(json).toContain('●●○');
     expect(json).toContain('https://donate');
     expect(json).toContain('https://contact');
-    expect(msg.components[0]).toEqual({ type: 10, content: '<@&9>' });
+    expect(msg.components[0]).toEqual({ type: 10, content: '<@&9> ถึงเวลา **ส่งรายงาน** แล้ว!' });
   });
 });

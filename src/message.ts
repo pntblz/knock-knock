@@ -52,29 +52,47 @@ function linkButton(label: string, url: string, emoji?: string) {
   return { type: BUTTON, style: LINK_STYLE, label, url, ...(emoji ? { emoji: { name: emoji } } : {}) };
 }
 
-export function buildReminderMessage(r: ReminderView, slot: Slot, ad: AdRow | null, settings: BotSettings) {
+/** ●●○ แสดงว่าถึงรอบที่เท่าไรของวัน */
+export function roundDots(round: number, total: number): string {
+  if (total < 2 || total > 12) return '';
+  return '●'.repeat(round) + '○'.repeat(Math.max(0, total - round));
+}
+
+export function buildReminderMessage(
+  r: ReminderView,
+  slot: Slot,
+  ad: AdRow | null,
+  settings: BotSettings,
+  now: Date = new Date(),
+) {
   const inner: unknown[] = [];
 
   if (ad && isHttpUrl(ad.image_url)) {
     inner.push({ type: MEDIA_GALLERY, items: [{ media: { url: ad.image_url }, description: ad.label ?? undefined }] });
   }
 
-  inner.push({ type: TEXT, content: `### 🔔 ${clip(r.title, 100)}` });
+  inner.push({
+    type: TEXT,
+    content: `-# 🔔 KNOCK KNOCK · แจ้งเตือนประจำวัน\n## ${clip(r.title, 100)}`,
+  });
 
   if (r.message?.trim()) {
     // กล่องข้อความแบบในตัวอย่าง — กัน ``` ในข้อความไม่ให้ปิดกล่องก่อน
     inner.push({ type: TEXT, content: '```\n' + clip(r.message.replace(/```/g, "'''"), 1500) + '\n```' });
   }
 
-  const roundText = slot.total > 1 ? `รอบ ${slot.round}/${slot.total} ของวันนี้ · ` : '';
-  inner.push({
-    type: TEXT,
-    content: [
-      `⏰ **เวลา:** ${roundText}\`${slot.hm}\``,
-      `📅 **ซ้ำ:** ${formatDays(r.days)}`,
-      `👤 **ตั้งโดย:** <@${r.created_by}>`,
-    ].join('\n'),
-  });
+  const dots = roundDots(slot.round, slot.total);
+  const fields = [
+    `⏰ **เวลา** \`${slot.hm} น.\``,
+    slot.total > 1 ? `🔁 **รอบ** \`${slot.round}/${slot.total}\` ของวันนี้ ${dots}` : null,
+    `📅 **ซ้ำ** \`${formatDays(r.days)}\``,
+    r.mention ? `🏷️ **แท็ก** ${r.mention}` : null,
+    `👤 **ตั้งโดย** <@${r.created_by}>`,
+  ].filter(Boolean);
+  inner.push({ type: SEPARATOR, divider: false, spacing: 1 });
+  inner.push({ type: TEXT, content: fields.join('\n') });
+  // <t:…:F> = Discord แปลงเป็นวันเวลาตามภาษา/เขตเวลาของคนอ่านเอง
+  inner.push({ type: TEXT, content: `-# 🗓️ <t:${Math.floor(now.getTime() / 1000)}:F>` });
 
   const buttons = [];
   if (isHttpUrl(settings.donate_url)) buttons.push(linkButton('Donate', settings.donate_url, '💖'));
@@ -93,7 +111,7 @@ export function buildReminderMessage(r: ReminderView, slot: Slot, ad: AdRow | nu
 
   const components: unknown[] = [];
   // ข้อความ V2 ใส่ content ไม่ได้ — @ คนไว้เหนือการ์ด ให้แจ้งเตือนเด้งจริง
-  if (r.mention) components.push({ type: TEXT, content: r.mention });
+  if (r.mention) components.push({ type: TEXT, content: `${r.mention} ถึงเวลา **${clip(r.title, 100)}** แล้ว!` });
   components.push({ type: CONTAINER, accent_color: accent(settings), components: inner });
 
   return {
