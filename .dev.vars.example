@@ -1,0 +1,7 @@
+# คัดลอกเป็น .dev.vars แล้วเติมค่า (ไฟล์ .dev.vars ไม่ขึ้น git)
+DISCORD_TOKEN=
+DISCORD_PUBLIC_KEY=
+DISCORD_APPLICATION_ID=
+OWNER_IDS=
+# เซิร์ฟเวอร์ของเจ้าของบอท — คำสั่ง /owner จะลงทะเบียนเฉพาะเซิร์ฟนี้
+OWNER_GUILD_ID=
