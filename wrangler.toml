@@ -9,12 +9,14 @@ crons = ["* * * * *"]
 [[d1_databases]]
 binding = "DB"
 database_name = "knock-knock"
-# ใส่ค่าที่ได้จาก `npx wrangler d1 create knock-knock`
-database_id = "REPLACE_WITH_DATABASE_ID"
+database_id = "a88a3c95-bb06-4732-bd77-7809bd28bc80"
 migrations_dir = "migrations"
+
+# ค่าที่เปิดเผยได้ (ดูได้ในหน้า General Information ของ Discord)
+[vars]
+DISCORD_APPLICATION_ID = "1572551248757006497"
+DISCORD_PUBLIC_KEY = "aaa55f28882af6ed39cb92cd355344810744fb9f14172285d449d266111f8eb5"
 
 # ค่าลับตั้งด้วย `npx wrangler secret put <ชื่อ>` (ห้ามใส่ในไฟล์นี้)
 #   DISCORD_TOKEN          bot token
-#   DISCORD_PUBLIC_KEY     public key ของ application
-#   DISCORD_APPLICATION_ID application id
 #   OWNER_IDS              user id ของเจ้าของบอท คั่นด้วยจุลภาค
