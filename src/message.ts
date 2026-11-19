@@ -53,47 +53,50 @@ function linkButton(label: string, url: string, emoji?: string) {
   return { type: BUTTON, style: LINK_STYLE, label, url, ...(emoji ? { emoji: { name: emoji } } : {}) };
 }
 
-/** 💜💜🤍 แสดงว่าถึงรอบที่เท่าไรของวัน */
-export function roundDots(round: number, total: number): string {
-  if (total < 2 || total > 12) return '';
-  return '💜'.repeat(round) + '🤍'.repeat(Math.max(0, total - round));
-}
-
-// อักษรตกแต่งน่ารัก ๆ ใช้ร่วมทุกการ์ด
+// อักษรตกแต่งน่ารัก ๆ ใช้ร่วมทุกการ์ด (ผู้ใช้เลือกแบบเอง 19 พ.ย. 2569)
 const BUNNY = '₍ᐢ. .ᐢ₎';
 const DIVIDER = '⋆｡ﾟ☁︎｡⋆｡ ﾟ☾ ﾟ｡⋆｡ﾟ☁︎｡⋆';
+const TITLE_FACE = '𐔌՞. .՞𐦯';
+
+/** บรรทัดเรียกเหนือการ์ด: "อย่าลืม<ข้อความ> น้า" · ไม่มีข้อความ = "ถึงเวลา <เรื่อง> แล้วน้า" */
+export function callLine(r: { title: string; message: string | null }): string {
+  const first = r.message?.trim().split('\n')[0]?.trim();
+  return first ? `อย่าลืม${clip(first, 80)} น้า` : `ถึงเวลา ${clip(r.title, 80)} แล้วน้า`;
+}
+
+/** ข้อความหลายบรรทัด → แถบอ้างอิง > ทุกบรรทัด */
+function quote(text: string): string {
+  return text
+    .split('\n')
+    .map((l) => `> ${l}`)
+    .join('\n');
+}
 
 export function buildReminderMessage(
   r: ReminderView,
   slot: Slot,
   ad: AdRow | null,
   settings: BotSettings,
-  now: Date = new Date(),
 ) {
   const inner: unknown[] = [];
 
   inner.push({
     type: TEXT,
-    content: `-# ⋆｡˚ 🔔 KNOCK KNOCK · แจ้งเตือนประจำวัน ˚｡⋆\n## ₊˚⊹ ${clip(r.title, 100)} ⊹˚₊`,
+    content: `-# ⋆｡˚ 🔔 KNOCK KNOCK · แจ้งเตือนประจำวัน ˚｡⋆\n## ${clip(r.title, 100)} ${TITLE_FACE}`,
   });
 
   if (r.message?.trim()) {
-    // กล่องข้อความแบบในตัวอย่าง — กัน ``` ในข้อความไม่ให้ปิดกล่องก่อน
-    inner.push({ type: TEXT, content: '```\n' + clip(r.message.replace(/```/g, "'''"), 1500) + '\n```' });
+    inner.push({ type: TEXT, content: quote(`${clip(r.message.trim(), 1500)} ♡`) });
   }
 
-  const dots = roundDots(slot.round, slot.total);
-  const fields = [
-    `⏰ **เวลา** ⊹ \`${slot.hm} น.\``,
-    slot.total > 1 ? `🔁 **รอบ** ⊹ \`${slot.round}/${slot.total}\` ของวันนี้ ${dots}` : null,
-    `📅 **ซ้ำ** ⊹ \`${formatDays(r.days)}\``,
-    r.mention ? `🏷️ **แท็ก** ⊹ ${r.mention}` : null,
-    `👤 **ตั้งโดย** ⊹ <@${r.created_by}>`,
+  // บรรทัดข้อมูลบรรทัดเดียว ตัวหนา เว้นช่องกว้าง (แบบที่ผู้ใช้เขียนมา 19 พ.ย. 2569)
+  const info = [
+    `**${slot.hm}**`,
+    slot.total > 1 ? `**รอบ ${slot.round}/${slot.total}**` : null,
+    `**${formatDays(r.days)}**`,
+    `**โดย**  <@${r.created_by}>`,
   ].filter(Boolean);
-  inner.push({ type: SEPARATOR, divider: false, spacing: 1 });
-  inner.push({ type: TEXT, content: fields.join('\n') });
-  // <t:…:F> = Discord แปลงเป็นวันเวลาตามภาษา/เขตเวลาของคนอ่านเอง
-  inner.push({ type: TEXT, content: `-# 🗓️ <t:${Math.floor(now.getTime() / 1000)}:F> ⋆˚✿˖°` });
+  inner.push({ type: TEXT, content: `˚₊‧꒰ა  ⏰  ${info.join('  ·  ')}  ໒꒱  ‧₊˚` });
 
   inner.push({ type: SEPARATOR, divider: true, spacing: 1 });
 
@@ -113,10 +116,21 @@ export function buildReminderMessage(
   if (ad && isHttpUrl(ad.link_url)) buttons.push(linkButton(clip(ad.label || 'ดูเพิ่มเติม', 80), ad.link_url, '✨'));
   inner.push({ type: ACTION_ROW, components: buttons });
 
+  // แถวจัดการ: ใครกดก็ได้ แต่บอทยอมให้แก้/ลบเฉพาะคนตั้งหรือคนมีสิทธิ์ Manage Server
+  if (r.id) {
+    inner.push({
+      type: ACTION_ROW,
+      components: [
+        { type: BUTTON, style: 2, label: 'แก้ไข', custom_id: `kk:edit:${r.id}`, emoji: { name: '✏️' } },
+        { type: BUTTON, style: 2, label: 'ลบแจ้งเตือนนี้', custom_id: `kk:del:${r.id}`, emoji: { name: '🗑️' } },
+      ],
+    });
+  }
+
   const components: unknown[] = [];
   // ข้อความ V2 ใส่ content ไม่ได้ — @ คนไว้เหนือการ์ด ให้แจ้งเตือนเด้งจริง
   if (r.mention) {
-    components.push({ type: TEXT, content: `${r.mention} ✧ ถึงเวลา **${clip(r.title, 100)}** แล้วน้า ${BUNNY} 🔔` });
+    components.push({ type: TEXT, content: `${r.mention} 🔔 ${callLine(r)} ⋆. 𐙚 ˚` });
   }
   components.push({ type: CONTAINER, accent_color: accent(settings), components: inner });
 
@@ -214,13 +228,18 @@ export function buildHelpMessage(settings: BotSettings) {
   const inner: unknown[] = [
     {
       type: TEXT,
-      content: `## 📖 วิธีใช้ knock-knock ${BUNNY}\nบอทแจ้งเตือนประจำวัน ตั้งเวลา จำนวนรอบ วันที่ซ้ำ และแท็กคน/ยศได้ ♡`,
+      content: [
+        `-# ⋆｡˚ 🔔 KNOCK KNOCK · วิธีใช้ ˚｡⋆`,
+        `## 📖 วิธีใช้ knock-knock ${TITLE_FACE}`,
+        'บอทแจ้งเตือนประจำวัน ตั้งได้ว่าเตือนเรื่องอะไร กี่โมง กี่รอบต่อวัน ซ้ำวันไหน และแท็กคน/ยศให้ ♡',
+        '-# ⋆. 𐙚 ˚ ตั้งได้**หลายอัน** (สูงสุด 25 ต่อเซิร์ฟ) แต่ละอันมีเลข **id** ของตัวเอง — ช่อง id ในทุกคำสั่ง **พิมพ์ชื่อแล้วเลือกจากรายการ**ได้เลย ไม่ต้องจำเลข',
+      ].join('\n'),
     },
     { type: SEPARATOR, divider: true, spacing: 1 },
     {
       type: TEXT,
       content: [
-        '### ➕ ตั้งแจ้งเตือน',
+        '### ➕ ตั้งแจ้งเตือนใหม่',
         '`/remind add` แล้วกรอกช่องต่อไปนี้',
         '• **title** เรื่องที่จะเตือน *(ต้องใส่)*',
         '• **times** เวลา คั่นด้วยจุลภาค เช่น `09:00,13:00,17:00`',
@@ -244,22 +263,36 @@ export function buildHelpMessage(settings: BotSettings) {
     {
       type: TEXT,
       content: [
-        '### 🛠️ จัดการ',
-        '`/remind list` ดูทั้งหมด พร้อมเลข id',
-        '`/remind tag id tag` เปลี่ยนคน/ยศที่แท็ก *(เว้น tag ว่าง = ไม่แท็กใคร)*',
-        '`/remind panel id` วางแผงปุ่มให้สมาชิกกด **รับยศ** เพื่อรับแจ้งเตือนเอง',
-        '`/remind test id` ส่งให้ดูทันที 1 ครั้ง',
-        '`/remind pause id` · `/remind resume id` พัก / เปิดต่อ',
-        '`/remind remove id` ลบ',
-        '`/remind timezone zone` เขตเวลาของเซิร์ฟ *(ค่าเริ่มต้น Asia/Bangkok)*',
+        '### 🔘 ปุ่มบนการ์ดแจ้งเตือน',
+        '🔔 **รับ / ยกเลิกแจ้งเตือน** — กดรับยศ แล้วบอทจะแท็กคุณทุกรอบ · กดอีกครั้งเพื่อเลิก *(มีเมื่อแจ้งเตือนนั้นแท็กยศ)*',
+        '📖 **คำสั่ง & วิธีใช้** — เปิดกล่องนี้',
+        '✏️ **แก้ไข** — เปิดฟอร์มแก้ เรื่อง · ข้อความ · เวลา · วันที่ซ้ำ',
+        '🗑️ **ลบแจ้งเตือนนี้** — ถามยืนยันก่อน ลบแล้วกู้คืนไม่ได้',
+        '-# แก้/ลบได้เฉพาะคนที่ตั้งแจ้งเตือนนั้น หรือคนที่มีสิทธิ์ Manage Server',
       ].join('\n'),
     },
+    { type: SEPARATOR, divider: true, spacing: 1 },
+    {
+      type: TEXT,
+      content: [
+        '### 🛠️ คำสั่งจัดการ',
+        '`/remind list` ดูแจ้งเตือนทั้งหมดของเซิร์ฟ พร้อมเลข id',
+        '`/remind edit` แก้ไข — กรอกแค่ id = เปิดฟอร์ม · กรอกช่องไหน = แก้ช่องนั้น (ย้ายห้องได้ด้วย `channel`)',
+        '`/remind tag` เปลี่ยนคน/ยศที่แท็ก *(เว้น tag ว่าง = ไม่แท็กใคร)*',
+        '`/remind panel` วางแผงปุ่มให้สมาชิกกดรับยศล่วงหน้า',
+        '`/remind test` ส่งการ์ดให้ดูทันที 1 ครั้ง',
+        '`/remind pause` · `/remind resume` พัก / เปิดต่อ',
+        '`/remind remove` ลบ',
+        '`/remind timezone` เขตเวลาของเซิร์ฟ *(ค่าเริ่มต้น Asia/Bangkok)*',
+      ].join('\n'),
+    },
+    { type: SEPARATOR, divider: true, spacing: 1 },
     {
       type: TEXT,
       content:
-        '-# คำสั่ง /remind ใช้ได้เฉพาะคนที่มีสิทธิ์ Manage Server — แอดมินเปิดให้ยศอื่นได้ที่ Server Settings › Integrations › knock-knock\n' +
-        '-# บอทต้องมีสิทธิ์ View Channel + Send Messages ในห้องที่ส่ง\n' +
-        '-# ปุ่มรับยศ: บอทต้องมีสิทธิ์ Manage Roles และยศของบอทต้องอยู่สูงกว่ายศที่แจก',
+        '-# ˚₊‧꒰ა คำสั่ง /remind ใช้ได้เฉพาะคนที่มีสิทธิ์ Manage Server — แอดมินเปิดให้ยศอื่นได้ที่ Server Settings › Integrations › knock-knock\n' +
+        '-# ˚₊‧꒰ა บอทต้องมีสิทธิ์ View Channel + Send Messages ในห้องที่ส่ง · ปุ่มรับยศต้องมีสิทธิ์ Manage Roles และยศบอทต้องอยู่สูงกว่ายศที่แจก\n' +
+        '-# ˚₊‧꒰ა บอทติดบั๊ก · สอบถาม · ลงโฆษณา ติดต่อ Discord : @luv4yumie ⋆. 𐙚 ˚',
     },
   ];
 

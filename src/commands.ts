@@ -9,7 +9,14 @@ const SUB = 1;
 const MANAGE_GUILD = String(1 << 5);
 const GUILD_ONLY = [0]; // ใช้ได้เฉพาะในเซิร์ฟเวอร์
 
-const idOption = { type: INTEGER, name: 'id', description: 'เลขแจ้งเตือน (ดูจาก /remind list)', required: true, min_value: 1 };
+// ช่องข้อความ (ไม่ใช่ตัวเลข) เพื่อให้พิมพ์ชื่อค้นได้ — ค่าที่ส่งมาคือเลข id ในรูปข้อความ
+const idOption = {
+  type: STRING,
+  name: 'id',
+  description: 'เลือกแจ้งเตือน (พิมพ์ชื่อหรือเลขเพื่อค้นหา)',
+  required: true,
+  autocomplete: true,
+};
 
 export const REMIND_COMMAND = {
   name: 'remind',
@@ -27,10 +34,26 @@ export const REMIND_COMMAND = {
         { type: STRING, name: 'start', description: 'หรือ: เวลาเริ่ม เช่น 08:00 (ใช้คู่กับ every + rounds)' },
         { type: INTEGER, name: 'every', description: 'ทุกกี่นาที เช่น 120 = ทุก 2 ชม.', min_value: 1, max_value: 1440 },
         { type: INTEGER, name: 'rounds', description: 'กี่รอบต่อวัน', min_value: 1, max_value: 24 },
-        { type: STRING, name: 'days', description: 'วันที่ซ้ำ: ทุกวัน · จ-ศ · ส-อา · จ,พ,ศ (ค่าเริ่มต้น ทุกวัน)' },
+        { type: STRING, name: 'days', description: 'วันที่ซ้ำ — กดเลือกจากรายการ หรือพิมพ์เช่น จ,พ,ศ (ค่าเริ่มต้น ทุกวัน)', autocomplete: true },
         { type: STRING, name: 'message', description: 'ข้อความในกล่อง', max_length: 1500 },
         { type: CHANNEL, name: 'channel', description: 'ห้องที่จะส่ง (ค่าเริ่มต้น ห้องนี้)', channel_types: [0, 5] },
         { type: STRING, name: 'tag', description: 'แท็กคน/ยศ พิมพ์ @ แล้วเลือกได้หลายอัน เช่น @ทีมงาน @ยูมี่ หรือ @everyone' },
+      ],
+    },
+    {
+      type: SUB,
+      name: 'edit',
+      description: 'แก้ไขแจ้งเตือน (กรอกแค่ id = เปิดฟอร์ม · กรอกช่องไหน = แก้ช่องนั้น)',
+      options: [
+        idOption,
+        { type: STRING, name: 'title', description: 'เรื่องใหม่', max_length: 100 },
+        { type: STRING, name: 'times', description: 'เวลาใหม่ เช่น 09:00,13:00' },
+        { type: STRING, name: 'start', description: 'หรือ: เวลาเริ่ม (คู่กับ every + rounds)' },
+        { type: INTEGER, name: 'every', description: 'ทุกกี่นาที', min_value: 1, max_value: 1440 },
+        { type: INTEGER, name: 'rounds', description: 'กี่รอบต่อวัน', min_value: 1, max_value: 24 },
+        { type: STRING, name: 'days', description: 'วันที่ซ้ำใหม่ — กดเลือกจากรายการ หรือพิมพ์เช่น จ,พ,ศ', autocomplete: true },
+        { type: STRING, name: 'message', description: 'ข้อความใหม่', max_length: 1500 },
+        { type: CHANNEL, name: 'channel', description: 'ย้ายไปห้องอื่น', channel_types: [0, 5] },
       ],
     },
     {

@@ -22,6 +22,7 @@ import {
   normalizeTags,
   ROLE_PREFIX,
   tagRoleIds,
+  callLine,
 } from '../src/message';
 
 describe('parseDays', () => {
@@ -155,10 +156,17 @@ describe('message', () => {
     expect(msg.flags).toBe(1 << 15);
     const json = JSON.stringify(msg);
     expect(json).toContain('https://x/a.png');
-    expect(json).toContain('`2/3`');
-    expect(json).toContain('💜💜🤍');
+    expect(json).toContain('รอบ 2/3');
+    expect(json).toContain('> ก่อน 17:00 ♡');
     expect(json).toContain('https://donate');
     expect(json).toContain('https://contact');
-    expect(msg.components[0]).toEqual({ type: 10, content: '<@&9> ✧ ถึงเวลา **ส่งรายงาน** แล้วน้า ₍ᐢ. .ᐢ₎ 🔔' });
+    expect(msg.components[0]).toEqual({ type: 10, content: '<@&9> 🔔 อย่าลืมก่อน 17:00 น้า ⋆. 𐙚 ˚' });
+  });
+});
+
+describe('ตกแต่ง', () => {
+  it('callLine ใช้บรรทัดแรกของข้อความ ไม่มีข้อความใช้ชื่อเรื่อง', () => {
+    expect(callLine({ title: 'Khui AI', message: 'ล็อคอิน Khui AI\nบรรทัดสอง' })).toBe('อย่าลืมล็อคอิน Khui AI น้า');
+    expect(callLine({ title: 'Khui AI', message: null })).toBe('ถึงเวลา Khui AI แล้วน้า');
   });
 });

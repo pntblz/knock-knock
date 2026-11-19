@@ -2,6 +2,25 @@
 import { guildTimezone, loadAds, loadSettings, type ReminderRow } from './db';
 import { DiscordError, sendChannelMessage, setMemberRole, type Env } from './discord';
 import {
+  applyEdit,
+  canManage,
+  dayChoices,
+  type ModalRow,
+  DEL_NO,
+  DEL_PREFIX,
+  DEL_YES_PREFIX,
+  deleteCancelled,
+  deleteConfirm,
+  deleteReminder,
+  EDIT_MODAL_PREFIX,
+  EDIT_PREFIX,
+  editedReply,
+  editModal,
+  idChoices,
+  readEditOptions,
+  readModal,
+} from './manage';
+import {
   buildHelpMessage,
   buildReminderMessage,
   EPHEMERAL,
@@ -27,6 +46,9 @@ import {
 const PING = 1;
 const APPLICATION_COMMAND = 2;
 const MESSAGE_COMPONENT = 3;
+const AUTOCOMPLETE = 4;
+const MODAL_SUBMIT = 5;
+const AUTOCOMPLETE_RESULT = 8;
 const PONG = 1;
 const REPLY = 4;
 
@@ -36,6 +58,7 @@ interface Option {
   name: string;
   type: number;
   value?: string | number;
+  focused?: boolean;
   options?: Option[];
 }
 
@@ -43,12 +66,13 @@ interface Interaction {
   type: number;
   guild_id?: string;
   channel_id?: string;
-  member?: { user: { id: string }; roles?: string[] };
+  member?: { user: { id: string }; roles?: string[]; permissions?: string };
   user?: { id: string };
   data?: {
     name: string;
     custom_id?: string;
     options?: Option[];
+    components?: ModalRow[];
   };
 }
 
@@ -64,12 +88,46 @@ class UserError extends Error {}
 export async function handleInteraction(env: Env, i: Interaction): Promise<Json> {
   if (i.type === PING) return { type: PONG };
 
-  // กดปุ่ม "คำสั่ง & วิธีใช้" บนการ์ด → กล่องสอนใช้งาน (เห็นคนเดียว)
-  if (i.type === MESSAGE_COMPONENT) {
-    const cid = i.data?.custom_id ?? '';
-    if (cid === HELP_CUSTOM_ID) return helpReply(env);
-    if (cid.startsWith(ROLE_PREFIX)) return toggleRole(env, i, cid.slice(ROLE_PREFIX.length));
-    return reply('ปุ่มนี้ใช้ไม่ได้แล้ว');
+  // ช่อง id ใน /remind … → รายชื่อแจ้งเตือนให้เลือก
+  if (i.type === AUTOCOMPLETE) {
+    const focused = i.data?.options?.[0]?.options?.find((o) => o.focused);
+    if (focused?.name === 'days') {
+      return { type: AUTOCOMPLETE_RESULT, data: { choices: dayChoices(String(focused.value ?? '')) } };
+    }
+    const rows = i.guild_id
+      ? (
+          await env.DB.prepare('SELECT id, title, times, days, active FROM reminders WHERE guild_id = ? ORDER BY id')
+            .bind(i.guild_id)
+            .all<ReminderRow>()
+        ).results
+      : [];
+    return { type: AUTOCOMPLETE_RESULT, data: { choices: idChoices(rows, String(focused?.value ?? '')) } };
+  }
+
+  try {
+    // กดปุ่มบนการ์ด
+    if (i.type === MESSAGE_COMPONENT) {
+      const cid = i.data?.custom_id ?? '';
+      if (cid === HELP_CUSTOM_ID) return await helpReply(env);
+      if (cid.startsWith(ROLE_PREFIX)) return await toggleRole(env, i, cid.slice(ROLE_PREFIX.length));
+      if (cid === DEL_NO) return deleteCancelled();
+      if (cid.startsWith(EDIT_PREFIX)) return editModal(await managed(env, i, cid.slice(EDIT_PREFIX.length)));
+      if (cid.startsWith(DEL_PREFIX)) return deleteConfirm(await managed(env, i, cid.slice(DEL_PREFIX.length)));
+      if (cid.startsWith(DEL_YES_PREFIX)) return await deleteReminder(env, await managed(env, i, cid.slice(DEL_YES_PREFIX.length)));
+      return reply('ปุ่มนี้ใช้ไม่ได้แล้ว');
+    }
+
+    // ส่งฟอร์มแก้ไข
+    if (i.type === MODAL_SUBMIT) {
+      const cid = i.data?.custom_id ?? '';
+      if (!cid.startsWith(EDIT_MODAL_PREFIX)) return reply('ฟอร์มนี้ใช้ไม่ได้แล้ว');
+      const r = await managed(env, i, cid.slice(EDIT_MODAL_PREFIX.length));
+      return editedReply(await applyEdit(env, r, readModal(i.data?.components ?? [])));
+    }
+  } catch (e) {
+    if (e instanceof UserError || e instanceof InputError) return reply(`⚠️ ${e.message}`);
+    console.error('component failed', e);
+    return reply('⚠️ มีบางอย่างผิดพลาด ลองใหม่อีกครั้ง');
   }
 
   if (i.type !== APPLICATION_COMMAND || !i.data) return reply('ไม่รองรับคำสั่งนี้');
@@ -95,7 +153,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
 async function getReminder(env: Env, guildId: string, id: unknown): Promise<ReminderRow> {
   const row = await env.DB.prepare('SELECT * FROM reminders WHERE id = ? AND guild_id = ?')
-    .bind(Number(id), guildId)
+    .bind(Number(String(id ?? '').replace(/\D/g, '')), guildId)
     .first<ReminderRow>();
   if (!row) throw new UserError(`ไม่พบแจ้งเตือน #${id} ในเซิร์ฟนี้`);
   return row;
@@ -131,6 +189,19 @@ async function toggleRole(env: Env, i: Interaction, idText: string): Promise<Jso
       ? `✅ ได้รับยศ ${names} แล้ว — จะถูกแท็กเมื่อถึงเวลา **${r.title}** (${JSON.parse(r.times).join(', ')})`
       : `🔕 เอายศ ${names} ออกแล้ว — จะไม่ถูกแท็กใน **${r.title}** อีก`,
   );
+}
+
+/** หาแจ้งเตือน + ตรวจว่าคนกดแก้/ลบได้ */
+async function managed(env: Env, i: Interaction, idText: string): Promise<ReminderRow> {
+  if (!i.guild_id) throw new UserError('ใช้ได้ในเซิร์ฟเวอร์เท่านั้น');
+  const r = await env.DB.prepare('SELECT * FROM reminders WHERE id = ? AND guild_id = ?')
+    .bind(Number(idText), i.guild_id)
+    .first<ReminderRow>();
+  if (!r) throw new UserError('แจ้งเตือนนี้ถูกลบไปแล้ว');
+  if (!canManage(i.member?.permissions, userId(i), r)) {
+    throw new UserError('แก้/ลบได้เฉพาะคนที่ตั้งแจ้งเตือนนี้ หรือคนที่มีสิทธิ์ Manage Server');
+  }
+  return r;
 }
 
 async function helpReply(env: Env): Promise<Json> {
@@ -201,6 +272,14 @@ async function remind(env: Env, i: Interaction, sub: string, o: Record<string, s
         return `${state} **#${r.id} ${r.title}** · ${JSON.parse(r.times).join(', ')} · ${formatDays(r.days)} · <#${r.channel_id}>${tags}${err}`;
       });
       return reply(clipLines([`เขตเวลา: ${tz}`, ...lines]));
+    }
+
+    case 'edit': {
+      const r = await getReminder(env, guildId, o.id);
+      const f = readEditOptions(o);
+      // ไม่กรอกอะไรนอกจาก id → เปิดฟอร์มแก้ไขที่เติมค่าเดิมไว้ให้
+      if (!Object.keys(f).length) return editModal(r);
+      return editedReply(await applyEdit(env, r, f));
     }
 
     case 'tag': {
