@@ -43,6 +43,13 @@ export async function sendChannelMessage(env: Env, channelId: string, body: unkn
   await discordFetch(env, `/channels/${channelId}/messages`, { method: 'POST', body: JSON.stringify(body) });
 }
 
+export async function setMemberRole(env: Env, guildId: string, userId: string, roleId: string, add: boolean) {
+  await discordFetch(env, `/guilds/${guildId}/members/${userId}/roles/${roleId}`, {
+    method: add ? 'PUT' : 'DELETE',
+    headers: { 'X-Audit-Log-Reason': encodeURIComponent(add ? 'กดรับแจ้งเตือน' : 'กดยกเลิกแจ้งเตือน') },
+  });
+}
+
 function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);

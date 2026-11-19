@@ -20,6 +20,7 @@ export interface BotSettings {
 }
 
 export interface ReminderView {
+  id?: number;
   title: string;
   message: string | null;
   days: number;
@@ -94,7 +95,9 @@ export function buildReminderMessage(
   // <t:…:F> = Discord แปลงเป็นวันเวลาตามภาษา/เขตเวลาของคนอ่านเอง
   inner.push({ type: TEXT, content: `-# 🗓️ <t:${Math.floor(now.getTime() / 1000)}:F>` });
 
-  const buttons = [];
+  const buttons: unknown[] = [];
+  const roleBtn = roleButton(r);
+  if (roleBtn) buttons.push(roleBtn);
   if (isHttpUrl(settings.donate_url)) buttons.push(linkButton('Donate', settings.donate_url, '💖'));
   if (isHttpUrl(settings.contact_url)) buttons.push(linkButton('ติดต่อ', settings.contact_url, '📩'));
   buttons.push(HELP_BUTTON);
@@ -153,6 +156,50 @@ export function allowedMentions(mention: string | null) {
   return { parse, ...(roles.length ? { roles } : {}), ...(users.length ? { users } : {}) };
 }
 
+// ---------- ปุ่มรับ/คืนยศ ----------
+
+export const ROLE_PREFIX = 'kk:role:';
+
+/** ยศ (ไม่รวมคน / @everyone) ที่แจ้งเตือนนี้แท็ก */
+export function tagRoleIds(mention: string | null): string[] {
+  return [...(mention ?? '').matchAll(/<@&(\d+)>/g)].map((m) => m[1]);
+}
+
+/** ปุ่ม "รับแจ้งเตือน" — มีเฉพาะแจ้งเตือนที่แท็กยศ กดซ้ำ = คืนยศ */
+function roleButton(r: ReminderView) {
+  if (!r.id || !tagRoleIds(r.mention).length) return null;
+  return { type: BUTTON, style: 1, label: 'รับ / ยกเลิกแจ้งเตือน', custom_id: `${ROLE_PREFIX}${r.id}`, emoji: { name: '🔔' } };
+}
+
+/** แผงรับยศ — ประกาศไว้ในห้องให้คนกดรับยศก่อนถึงเวลาแจ้งเตือน */
+export function buildRolePanel(r: ReminderView & { times: string[] }, settings: BotSettings) {
+  const roles = tagRoleIds(r.mention).map((id) => `<@&${id}>`);
+  const btn = roleButton(r);
+  return {
+    flags: IS_COMPONENTS_V2,
+    components: [
+      {
+        type: CONTAINER,
+        accent_color: accent(settings),
+        components: [
+          { type: TEXT, content: `-# 🔔 KNOCK KNOCK · รับแจ้งเตือน\n## ${clip(r.title, 100)}` },
+          {
+            type: TEXT,
+            content: [
+              `กดปุ่มด้านล่างเพื่อรับยศ ${roles.join(' ')} แล้วบอทจะแท็กคุณทุกครั้งที่ถึงเวลา`,
+              'กดอีกครั้งเพื่อยกเลิก',
+            ].join('\n'),
+          },
+          { type: SEPARATOR, divider: false, spacing: 1 },
+          { type: TEXT, content: `⏰ **เวลา** \`${r.times.join(' · ')}\`\n📅 **ซ้ำ** \`${formatDays(r.days)}\`` },
+          ...(btn ? [{ type: ACTION_ROW, components: [btn, HELP_BUTTON] }] : []),
+        ],
+      },
+    ],
+    allowed_mentions: { parse: [] },
+  };
+}
+
 // ---------- ปุ่มและกล่อง "วิธีใช้" ----------
 
 export const HELP_CUSTOM_ID = 'kk:help';
@@ -194,6 +241,7 @@ export function buildHelpMessage(settings: BotSettings) {
         '### 🛠️ จัดการ',
         '`/remind list` ดูทั้งหมด พร้อมเลข id',
         '`/remind tag id tag` เปลี่ยนคน/ยศที่แท็ก *(เว้น tag ว่าง = ไม่แท็กใคร)*',
+        '`/remind panel id` วางแผงปุ่มให้สมาชิกกด **รับยศ** เพื่อรับแจ้งเตือนเอง',
         '`/remind test id` ส่งให้ดูทันที 1 ครั้ง',
         '`/remind pause id` · `/remind resume id` พัก / เปิดต่อ',
         '`/remind remove id` ลบ',
@@ -204,7 +252,8 @@ export function buildHelpMessage(settings: BotSettings) {
       type: TEXT,
       content:
         '-# คำสั่ง /remind ใช้ได้เฉพาะคนที่มีสิทธิ์ Manage Server — แอดมินเปิดให้ยศอื่นได้ที่ Server Settings › Integrations › knock-knock\n' +
-        '-# บอทต้องมีสิทธิ์ View Channel + Send Messages ในห้องที่ส่ง',
+        '-# บอทต้องมีสิทธิ์ View Channel + Send Messages ในห้องที่ส่ง\n' +
+        '-# ปุ่มรับยศ: บอทต้องมีสิทธิ์ Manage Roles และยศของบอทต้องอยู่สูงกว่ายศที่แจก',
     },
   ];
 

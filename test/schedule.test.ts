@@ -13,7 +13,16 @@ import {
   sqliteUtcToMs,
   type AdRow,
 } from '../src/schedule';
-import { allowedMentions, buildHelpMessage, buildReminderMessage, HELP_CUSTOM_ID, normalizeTags } from '../src/message';
+import {
+  allowedMentions,
+  buildHelpMessage,
+  buildReminderMessage,
+  buildRolePanel,
+  HELP_CUSTOM_ID,
+  normalizeTags,
+  ROLE_PREFIX,
+  tagRoleIds,
+} from '../src/message';
 
 describe('parseDays', () => {
   it('รับค่าลัด', () => {
@@ -113,6 +122,16 @@ describe('message', () => {
     expect(normalizeTags('')).toBeNull();
     expect(normalizeTags('<@&1>  <@!2> ทีมงาน <@&1> @everyone')).toBe('<@&1> <@2> @everyone');
     expect(() => normalizeTags(Array.from({ length: 11 }, (_, i) => `<@${i}>`).join(' '))).toThrow('ไม่เกิน');
+  });
+  it('ปุ่มรับยศขึ้นเฉพาะแจ้งเตือนที่แท็กยศ', () => {
+    expect(tagRoleIds('<@&1> <@2> @everyone <@&3>')).toEqual(['1', '3']);
+    const base = { id: 7, title: 't', message: null, days: WEEKDAYS, created_by: '1' };
+    const slot = { hm: '09:00', round: 1, total: 1 };
+    expect(JSON.stringify(buildReminderMessage({ ...base, mention: '<@&5>' }, slot, null, {}))).toContain(`${ROLE_PREFIX}7`);
+    expect(JSON.stringify(buildReminderMessage({ ...base, mention: '@everyone' }, slot, null, {}))).not.toContain(ROLE_PREFIX);
+    const panel = JSON.stringify(buildRolePanel({ ...base, mention: '<@&5>', times: ['09:00'] }, {}));
+    expect(panel).toContain(`${ROLE_PREFIX}7`);
+    expect(panel).toContain('<@&5>');
   });
   it('การ์ดมีปุ่มวิธีใช้เสมอ และกล่องวิธีใช้เห็นคนเดียว', () => {
     const msg = buildReminderMessage(

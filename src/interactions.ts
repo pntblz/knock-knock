@@ -1,6 +1,6 @@
 // จัดการคำสั่ง slash ที่ Discord ส่งมา
 import { guildTimezone, loadAds, loadSettings, type ReminderRow } from './db';
-import { sendChannelMessage, type Env } from './discord';
+import { DiscordError, sendChannelMessage, setMemberRole, type Env } from './discord';
 import {
   buildHelpMessage,
   buildReminderMessage,
@@ -8,6 +8,9 @@ import {
   HELP_CUSTOM_ID,
   IS_COMPONENTS_V2,
   normalizeTags,
+  ROLE_PREFIX,
+  buildRolePanel,
+  tagRoleIds,
 } from './message';
 import {
   buildTimes,
@@ -40,7 +43,7 @@ interface Interaction {
   type: number;
   guild_id?: string;
   channel_id?: string;
-  member?: { user: { id: string } };
+  member?: { user: { id: string }; roles?: string[] };
   user?: { id: string };
   data?: {
     name: string;
@@ -63,7 +66,9 @@ export async function handleInteraction(env: Env, i: Interaction): Promise<Json>
 
   // กดปุ่ม "คำสั่ง & วิธีใช้" บนการ์ด → กล่องสอนใช้งาน (เห็นคนเดียว)
   if (i.type === MESSAGE_COMPONENT) {
-    if (i.data?.custom_id === HELP_CUSTOM_ID) return helpReply(env);
+    const cid = i.data?.custom_id ?? '';
+    if (cid === HELP_CUSTOM_ID) return helpReply(env);
+    if (cid.startsWith(ROLE_PREFIX)) return toggleRole(env, i, cid.slice(ROLE_PREFIX.length));
     return reply('ปุ่มนี้ใช้ไม่ได้แล้ว');
   }
 
@@ -94,6 +99,38 @@ async function getReminder(env: Env, guildId: string, id: unknown): Promise<Remi
     .first<ReminderRow>();
   if (!row) throw new UserError(`ไม่พบแจ้งเตือน #${id} ในเซิร์ฟนี้`);
   return row;
+}
+
+/** กดปุ่ม "รับ / ยกเลิกแจ้งเตือน" — มียศครบแล้ว = เอาออกทั้งหมด, ยังไม่ครบ = ให้ที่ขาด */
+async function toggleRole(env: Env, i: Interaction, idText: string): Promise<Json> {
+  if (!i.guild_id || !i.member) return reply('ใช้ได้ในเซิร์ฟเวอร์เท่านั้น');
+  const r = await env.DB.prepare('SELECT * FROM reminders WHERE id = ? AND guild_id = ?')
+    .bind(Number(idText), i.guild_id)
+    .first<ReminderRow>();
+  if (!r) return reply('แจ้งเตือนนี้ถูกลบไปแล้ว');
+  const roles = tagRoleIds(r.mention);
+  if (!roles.length) return reply('แจ้งเตือนนี้ไม่ได้แท็กยศแล้ว — ไม่มียศให้รับ');
+
+  const have = new Set(i.member.roles ?? []);
+  const add = roles.some((id) => !have.has(id));
+  const targets = add ? roles.filter((id) => !have.has(id)) : roles;
+  try {
+    for (const roleId of targets) await setMemberRole(env, i.guild_id, i.member.user.id, roleId, add);
+  } catch (e) {
+    if (e instanceof DiscordError && e.status === 403) {
+      return reply(
+        '⚠️ บอทให้ยศไม่ได้ — แอดมินต้องให้สิทธิ์ **Manage Roles** กับบอท และลากยศของบอท (knock-knock) ' +
+          `ให้อยู่**สูงกว่า** ${roles.map((id) => `<@&${id}>`).join(' ')} ใน Server Settings › Roles`,
+      );
+    }
+    throw e;
+  }
+  const names = targets.map((id) => `<@&${id}>`).join(' ');
+  return reply(
+    add
+      ? `✅ ได้รับยศ ${names} แล้ว — จะถูกแท็กเมื่อถึงเวลา **${r.title}** (${JSON.parse(r.times).join(', ')})`
+      : `🔕 เอายศ ${names} ออกแล้ว — จะไม่ถูกแท็กใน **${r.title}** อีก`,
+  );
 }
 
 async function helpReply(env: Env): Promise<Json> {
@@ -171,6 +208,22 @@ async function remind(env: Env, i: Interaction, sub: string, o: Record<string, s
       const mention = normalizeTags(str(o.tag));
       await env.DB.prepare('UPDATE reminders SET mention = ? WHERE id = ?').bind(mention, r.id).run();
       return reply(`🏷️ #${r.id} ${r.title} — แท็ก: ${mention ?? 'ไม่แท็กใคร'}`);
+    }
+
+    case 'panel': {
+      const r = await getReminder(env, guildId, o.id);
+      if (!tagRoleIds(r.mention).length) {
+        throw new UserError(`#${r.id} ยังไม่ได้แท็กยศ — ตั้งก่อนด้วย \`/remind tag id:${r.id} tag:@ยศ\``);
+      }
+      const channelId = str(o.channel) || i.channel_id;
+      if (!channelId) throw new UserError('ไม่พบห้องที่จะส่ง');
+      const settings = await loadSettings(env.DB);
+      try {
+        await sendChannelMessage(env, channelId, buildRolePanel({ ...r, times: JSON.parse(r.times) }, settings));
+      } catch (e) {
+        throw new UserError(`ส่งไม่ได้ — ให้สิทธิ์บอท "View Channel" + "Send Messages" ใน <#${channelId}> ก่อน\n-# ${String(e).slice(0, 200)}`);
+      }
+      return reply(`📌 ส่งแผงรับยศของ #${r.id} ไปที่ <#${channelId}> แล้ว — ปักหมุดไว้ให้คนเห็นได้เลย`);
     }
 
     case 'remove': {

@@ -39,6 +39,15 @@ export const REMIND_COMMAND = {
       description: 'เปลี่ยนคน/ยศที่แท็กของแจ้งเตือน',
       options: [idOption, { type: STRING, name: 'tag', description: 'พิมพ์ @ แล้วเลือกได้หลายอัน (เว้นว่าง = ไม่แท็กใคร)' }],
     },
+    {
+      type: SUB,
+      name: 'panel',
+      description: 'ส่งแผงปุ่ม "รับแจ้งเตือน" ให้คนกดรับยศที่แจ้งเตือนนี้แท็กเอง',
+      options: [
+        idOption,
+        { type: CHANNEL, name: 'channel', description: 'ห้องที่จะวางแผง (ค่าเริ่มต้น ห้องนี้)', channel_types: [0, 5] },
+      ],
+    },
     { type: SUB, name: 'help', description: 'วิธีใช้และคำสั่งทั้งหมด' },
     { type: SUB, name: 'list', description: 'ดูแจ้งเตือนทั้งหมดของเซิร์ฟนี้' },
     { type: SUB, name: 'remove', description: 'ลบแจ้งเตือน', options: [idOption] },
