@@ -337,7 +337,7 @@ async function owner(env: Env, i: Interaction, sub: string, o: Record<string, st
         return reply(`ลบ ${key} แล้ว`);
       }
       if (key.endsWith('_url') && !URL_RE.test(value)) throw new UserError('ลิงก์ต้องขึ้นต้นด้วย https://');
-      if (key === 'accent_color' && !/^#?[0-9a-f]{6}$/i.test(value)) throw new UserError('สีต้องเป็นรูปแบบ #e91e63');
+      if (key === 'accent_color' && !/^#?[0-9a-f]{6}$/i.test(value)) throw new UserError('สีต้องเป็นรูปแบบ #9b6bd6');
       await env.DB.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value')
         .bind(key, value)
         .run();

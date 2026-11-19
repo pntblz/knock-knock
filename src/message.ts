@@ -16,7 +16,7 @@ const LINK_STYLE = 5;
 export interface BotSettings {
   donate_url?: string;
   contact_url?: string;
-  accent_color?: string; // "#e91e63"
+  accent_color?: string; // "#9b6bd6"
 }
 
 export interface ReminderView {
@@ -34,7 +34,7 @@ export interface Slot {
   total: number;
 }
 
-const DEFAULT_ACCENT = 0xe91e63;
+const DEFAULT_ACCENT = 0x9b6bd6; // ม่วงเข้ากับโลโก้
 
 function accent(s: BotSettings): number {
   const m = /^#?([0-9a-f]{6})$/i.exec(s.accent_color ?? '');

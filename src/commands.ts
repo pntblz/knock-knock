@@ -101,7 +101,7 @@ export const OWNER_COMMAND = {
           choices: [
             { name: 'ลิงก์ Donate', value: 'donate_url' },
             { name: 'ลิงก์ติดต่อ', value: 'contact_url' },
-            { name: 'สีขอบการ์ด (#e91e63)', value: 'accent_color' },
+            { name: 'สีขอบการ์ด (#9b6bd6)', value: 'accent_color' },
           ],
         },
         { type: STRING, name: 'value', description: 'ค่าใหม่ (เว้นว่าง = ลบ)' },
