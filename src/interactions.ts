@@ -1,6 +1,6 @@
 // จัดการคำสั่ง slash ที่ Discord ส่งมา
 import { guildTimezone, loadAds, loadSettings, type ReminderRow } from './db';
-import { DiscordError, sendChannelMessage, setMemberRole, type Env } from './discord';
+import { DiscordError, isGuildAllowed, leaveGuild, sendChannelMessage, setMemberRole, type Env } from './discord';
 import {
   applyEdit,
   canManage,
@@ -87,6 +87,13 @@ class UserError extends Error {}
 
 export async function handleInteraction(env: Env, i: Interaction): Promise<Json> {
   if (i.type === PING) return { type: PONG };
+
+  // บอทเปิดใช้เฉพาะเซิร์ฟที่อนุญาต — เซิร์ฟอื่นตอบปฏิเสธแล้วออกจากเซิร์ฟนั้น
+  if (!isGuildAllowed(env, i.guild_id)) {
+    if (i.type === AUTOCOMPLETE) return { type: AUTOCOMPLETE_RESULT, data: { choices: [] } };
+    await leaveGuild(env, i.guild_id!);
+    return reply('🔒 บอทนี้เปิดใช้เฉพาะบางเซิร์ฟ — สนใจใช้งานติดต่อ Discord : @luv4yumie');
+  }
 
   // ช่อง id ใน /remind … → รายชื่อแจ้งเตือนให้เลือก
   if (i.type === AUTOCOMPLETE) {
@@ -198,8 +205,8 @@ async function managed(env: Env, i: Interaction, idText: string): Promise<Remind
     .bind(Number(idText), i.guild_id)
     .first<ReminderRow>();
   if (!r) throw new UserError('แจ้งเตือนนี้ถูกลบไปแล้ว');
-  if (!canManage(i.member?.permissions, userId(i), r)) {
-    throw new UserError('แก้/ลบได้เฉพาะคนที่ตั้งแจ้งเตือนนี้ หรือคนที่มีสิทธิ์ Manage Server');
+  if (!canManage(i.member?.permissions)) {
+    throw new UserError('🔒 แก้/ลบได้เฉพาะผู้ดูแลเซิร์ฟ (สิทธิ์ Administrator หรือ Manage Server)');
   }
   return r;
 }

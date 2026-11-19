@@ -1,5 +1,5 @@
 // ทำงานทุกนาทีจาก Cron Trigger: หาแจ้งเตือนที่ถึงเวลาแล้วส่ง
-import { DiscordError, sendChannelMessage, type Env } from './discord';
+import { DiscordError, isGuildAllowed, sendChannelMessage, type Env } from './discord';
 import { loadAds, loadSettings, type ReminderRow } from './db';
 import { buildReminderMessage } from './message';
 import { dueSlots, pickAd, sqliteUtcToMs, type DueSlot } from './schedule';
@@ -13,9 +13,11 @@ export async function runTick(env: Env, now = new Date()): Promise<{ sent: numbe
        FROM reminders r LEFT JOIN guilds g ON g.guild_id = r.guild_id
       WHERE r.active = 1`,
   ).all<ReminderRow & { tz: string }>();
+  // เซิร์ฟที่ไม่ได้รับอนุญาต ไม่ส่งแม้มีแจ้งเตือนค้างในฐานข้อมูล
+  const allowedRows = results.filter((r) => isGuildAllowed(env, r.guild_id));
 
   const due: { r: ReminderRow; s: DueSlot }[] = [];
-  for (const r of results) {
+  for (const r of allowedRows) {
     let times: string[];
     try {
       times = JSON.parse(r.times);

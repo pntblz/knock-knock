@@ -8,6 +8,7 @@ export interface Env {
   DISCORD_PUBLIC_KEY: string;
   DISCORD_APPLICATION_ID: string;
   OWNER_IDS?: string;
+  ALLOWED_GUILD_IDS?: string; // เซิร์ฟที่ใช้บอทได้ คั่นด้วยจุลภาค · ว่าง = ทุกเซิร์ฟ
 }
 
 export class DiscordError extends Error {
@@ -48,6 +49,26 @@ export async function setMemberRole(env: Env, guildId: string, userId: string, r
     method: add ? 'PUT' : 'DELETE',
     headers: { 'X-Audit-Log-Reason': encodeURIComponent(add ? 'กดรับแจ้งเตือน' : 'กดยกเลิกแจ้งเตือน') },
   });
+}
+
+export function allowedGuilds(env: Env): string[] {
+  return (env.ALLOWED_GUILD_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** เซิร์ฟนี้ใช้บอทได้ไหม — ไม่ได้ตั้งรายชื่อ = ได้ทุกเซิร์ฟ */
+export function isGuildAllowed(env: Env, guildId: string | undefined): boolean {
+  const list = allowedGuilds(env);
+  return !guildId || !list.length || list.includes(guildId);
+}
+
+/** ให้บอทออกจากเซิร์ฟที่ไม่ได้รับอนุญาต */
+export async function leaveGuild(env: Env, guildId: string): Promise<void> {
+  await discordFetch(env, `/users/@me/guilds/${guildId}`, { method: 'DELETE' }).catch((e) =>
+    console.error('leave guild failed', guildId, e),
+  );
 }
 
 function hexToBytes(hex: string): Uint8Array {

@@ -3,6 +3,7 @@ import { canManage, dayChoices, daysInput, editModal, idChoices, readEditOptions
 import { parseDays, WEEKDAYS, WEEKEND, ALL_DAYS } from '../src/schedule';
 import { buildReminderMessage, topLine } from '../src/message';
 import type { ReminderRow } from '../src/db';
+import { isGuildAllowed, type Env } from '../src/discord';
 
 const row: ReminderRow = {
   id: 3,
@@ -21,12 +22,19 @@ const row: ReminderRow = {
 };
 
 describe('manage', () => {
-  it('canManage: คนตั้ง / Manage Server / Admin ได้ คนอื่นไม่ได้', () => {
-    expect(canManage('0', 'u1', row)).toBe(true);
-    expect(canManage(String(1 << 5), 'u2', row)).toBe(true);
-    expect(canManage(String(1 << 3), 'u2', row)).toBe(true);
-    expect(canManage('2048', 'u2', row)).toBe(false);
-    expect(canManage(undefined, 'u2', row)).toBe(false);
+  it('canManage: เฉพาะ Administrator / Manage Server (คนตั้งเองแต่ไม่มีสิทธิ์ = ไม่ได้)', () => {
+    expect(canManage('0')).toBe(false);
+    expect(canManage(String(1 << 5))).toBe(true);
+    expect(canManage(String(1 << 3))).toBe(true);
+    expect(canManage('2048')).toBe(false);
+    expect(canManage(undefined)).toBe(false);
+  });
+
+  it('isGuildAllowed: ตั้งรายชื่อแล้วรับเฉพาะในรายชื่อ · ไม่ตั้ง = ทุกเซิร์ฟ', () => {
+    const env = { ALLOWED_GUILD_IDS: ' 111, 222 ' } as Env;
+    expect(isGuildAllowed(env, '111')).toBe(true);
+    expect(isGuildAllowed(env, '333')).toBe(false);
+    expect(isGuildAllowed({} as Env, '333')).toBe(true);
   });
 
   it('daysInput พิมพ์กลับเข้า parseDays ได้ค่าเดิม', () => {

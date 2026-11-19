@@ -19,9 +19,8 @@ const REPLY = 4;
 const ADMINISTRATOR = 1n << 3n;
 const MANAGE_GUILD = 1n << 5n;
 
-/** แก้/ลบได้: แอดมิน · คนมีสิทธิ์ Manage Server · คนที่ตั้งแจ้งเตือนนั้นเอง */
-export function canManage(permissions: string | undefined, userId: string, r: Pick<ReminderRow, 'created_by'>): boolean {
-  if (r.created_by === userId) return true;
+/** แก้/ลบได้เฉพาะผู้ดูแล: Administrator หรือ Manage Server (คนตั้งแต่ไม่มีสิทธิ์แล้ว = ไม่ได้) */
+export function canManage(permissions: string | undefined): boolean {
   try {
     const p = BigInt(permissions ?? '0');
     return (p & (ADMINISTRATOR | MANAGE_GUILD)) !== 0n;
