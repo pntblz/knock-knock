@@ -207,16 +207,19 @@ export function buildRolePanel(r: ReminderView & { times: string[] }, settings: 
         type: CONTAINER,
         accent_color: accent(settings),
         components: [
-          { type: TEXT, content: `-# ⋆｡˚ 🔔 KNOCK KNOCK · รับแจ้งเตือน ˚｡⋆\n## ₊˚⊹ ${clip(r.title, 100)} ⊹˚₊` },
+          // แบบ A (ผู้ใช้เลือก 19 พ.ย. 2569) — เข้าชุดกับการ์ดแจ้งเตือน
+          { type: TEXT, content: `-# ⋆｡˚ 🔔 KNOCK KNOCK · รับแจ้งเตือน ˚｡⋆\n## ${clip(r.title, 100)} ${TITLE_FACE}` },
           {
             type: TEXT,
-            content: [
-              `กดปุ่มด้านล่างเพื่อรับยศ ${roles.join(' ')} แล้วบอทจะแท็กคุณทุกครั้งที่ถึงเวลา ${BUNNY}`,
-              'กดอีกครั้งเพื่อยกเลิก ♡',
-              DIVIDER,
-            ].join('\n'),
+            content: quote(
+              `กดปุ่มด้านล่างเพื่อรับยศ ${roles.join(' ')} ♡\nแล้วบอทจะแท็กเรียกทุกครั้งที่ถึงเวลา`,
+            ),
           },
-          { type: TEXT, content: `⏰ **เวลา** ⊹ \`${r.times.join(' · ')}\`\n📅 **ซ้ำ** ⊹ \`${formatDays(r.days)}\`` },
+          {
+            type: TEXT,
+            content: `˚₊‧꒰ა  ⏰  ${r.times.map((t) => `**${t}**`).join(' · ')}  ·  **${formatDays(r.days)}**  ໒꒱  ‧₊˚`,
+          },
+          { type: TEXT, content: '-# กดอีกครั้งเพื่อยกเลิก ⋆. 𐙚 ˚' },
           ...(btn ? [{ type: ACTION_ROW, components: [btn, HELP_BUTTON] }] : []),
         ],
       },
