@@ -242,9 +242,19 @@ async function remind(env: Env, i: Interaction, sub: string, o: Record<string, s
       const res = await env.DB.batch([
         env.DB.prepare('INSERT OR IGNORE INTO guilds (guild_id) VALUES (?)').bind(guildId),
         env.DB.prepare(
-          `INSERT INTO reminders (guild_id, channel_id, title, message, times, days, mention, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-        ).bind(guildId, channelId, title, str(o.message) || null, JSON.stringify(times), days, mention, userId(i)),
+          `INSERT INTO reminders (guild_id, channel_id, title, message, times, days, mention, created_by, call_text)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        ).bind(
+          guildId,
+          channelId,
+          title,
+          str(o.message) || null,
+          JSON.stringify(times),
+          days,
+          mention,
+          userId(i),
+          str(o.call) || null,
+        ),
       ]);
       const id = (res[1].results[0] as { id: number }).id;
       const tz = await guildTimezone(env.DB, guildId);

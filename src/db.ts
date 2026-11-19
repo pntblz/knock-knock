@@ -14,6 +14,7 @@ export interface ReminderRow {
   active: number;
   last_error: string | null;
   created_at: string;
+  call_text: string | null;
 }
 
 export async function loadSettings(db: D1Database): Promise<BotSettings> {

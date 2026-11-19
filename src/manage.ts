@@ -1,7 +1,7 @@
 // แก้ไข / ลบ แจ้งเตือน — ใช้ทั้งปุ่มบนการ์ด, ฟอร์ม (modal) และ /remind edit
 import type { ReminderRow } from './db';
 import type { Env } from './discord';
-import { EPHEMERAL } from './message';
+import { EPHEMERAL, topLine } from './message';
 import { ALL_DAYS, buildTimes, formatDays, InputError, parseDays, parseTimes, WEEKDAYS, WEEKEND } from './schedule';
 
 type Json = Record<string, unknown>;
@@ -104,6 +104,12 @@ export function editModal(r: ReminderRow): Json {
       title: `✏️ แก้ไขแจ้งเตือน #${r.id}`.slice(0, 45),
       components: [
         textInput('title', 'เรื่อง', r.title, { max: 100 }),
+        textInput('call', 'บรรทัดเรียกเหนือการ์ด', r.call_text ?? '', {
+          required: false,
+          max: 300,
+          placeholder: topLine(r).slice(0, 100),
+          description: 'ต่อท้ายแท็ก · เว้นว่าง = ใช้แบบอัตโนมัติ (ที่เห็นจาง ๆ ในช่อง)',
+        }),
         textInput('message', 'ข้อความ', r.message ?? '', {
           paragraph: true,
           required: false,
@@ -131,7 +137,11 @@ export interface EditFields {
   times?: string[];
   days?: number;
   channel_id?: string;
+  call_text?: string | null;
 }
+
+/** ค่าที่แปลว่า "กลับไปใช้แบบอัตโนมัติ" ในคำสั่ง */
+const RESET_WORDS = ['-', 'auto', 'อัตโนมัติ', 'ค่าเดิม', 'reset'];
 
 /** อ่านค่าจากฟอร์มที่ส่งมา */
 export function readModal(rows: ModalRow[]): EditFields {
@@ -159,6 +169,7 @@ export function readModal(rows: ModalRow[]): EditFields {
     message: v.message || null,
     times: parseTimes(v.times ?? ''),
     days,
+    ...('call' in v ? { call_text: v.call || null } : {}),
   };
 }
 
@@ -195,6 +206,7 @@ export function readEditOptions(o: Record<string, string | number | undefined>):
   else if (s('start')) f.times = buildTimes(s('start'), Number(o.every ?? 0), Number(o.rounds ?? 1));
   if (s('days')) f.days = parseDays(s('days'));
   if (s('channel')) f.channel_id = s('channel');
+  if (s('call')) f.call_text = RESET_WORDS.includes(s('call').toLowerCase()) ? null : s('call');
   return f;
 }
 
@@ -206,9 +218,12 @@ export async function applyEdit(env: Env, r: ReminderRow, f: EditFields): Promis
     times: f.times ? JSON.stringify(f.times) : r.times,
     days: f.days ?? r.days,
     channel_id: f.channel_id ?? r.channel_id,
+    call_text: f.call_text !== undefined ? f.call_text : r.call_text,
   };
-  await env.DB.prepare('UPDATE reminders SET title = ?, message = ?, times = ?, days = ?, channel_id = ?, last_error = NULL WHERE id = ?')
-    .bind(next.title, next.message, next.times, next.days, next.channel_id, r.id)
+  await env.DB.prepare(
+    'UPDATE reminders SET title = ?, message = ?, times = ?, days = ?, channel_id = ?, call_text = ?, last_error = NULL WHERE id = ?',
+  )
+    .bind(next.title, next.message, next.times, next.days, next.channel_id, next.call_text, r.id)
     .run();
   return next;
 }
@@ -221,6 +236,7 @@ export function editedReply(r: ReminderRow): Json {
       allowed_mentions: { parse: [] },
       content: [
         `✏️ แก้ไข **#${r.id} ${r.title}** แล้ว ₍ᐢ. .ᐢ₎`,
+        `🔔 บรรทัดเรียก: ${topLine(r)}${r.call_text ? '' : ' *(อัตโนมัติ)*'}`,
         `⏰ ${(JSON.parse(r.times) as string[]).join(', ')} · 📅 ${formatDays(r.days)} · ส่งที่ <#${r.channel_id}>`,
         r.message ? `> ${r.message.split('\n')[0]}` : '',
         '-# การ์ดที่ส่งไปแล้วไม่เปลี่ยน — รอบถัดไปจะใช้ค่าใหม่',

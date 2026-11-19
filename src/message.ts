@@ -26,6 +26,7 @@ export interface ReminderView {
   days: number;
   mention: string | null;
   created_by: string;
+  call_text?: string | null; // บรรทัดเรียกที่ตั้งเอง (ว่าง = อัตโนมัติ)
 }
 
 export interface Slot {
@@ -58,10 +59,16 @@ const BUNNY = '₍ᐢ. .ᐢ₎';
 const DIVIDER = '⋆｡ﾟ☁︎｡⋆｡ ﾟ☾ ﾟ｡⋆｡ﾟ☁︎｡⋆';
 const TITLE_FACE = '𐔌՞. .՞𐦯';
 
-/** บรรทัดเรียกเหนือการ์ด: "อย่าลืม<ข้อความ> น้า" · ไม่มีข้อความ = "ถึงเวลา <เรื่อง> แล้วน้า" */
+/** บรรทัดเรียกแบบอัตโนมัติ: "อย่าลืม<ข้อความ> น้า" · ไม่มีข้อความ = "ถึงเวลา <เรื่อง> แล้วน้า" */
 export function callLine(r: { title: string; message: string | null }): string {
   const first = r.message?.trim().split('\n')[0]?.trim();
   return first ? `อย่าลืม${clip(first, 80)} น้า` : `ถึงเวลา ${clip(r.title, 80)} แล้วน้า`;
+}
+
+/** บรรทัดเหนือการ์ด (ไม่รวมแท็ก) — ตั้งเองได้ ไม่ตั้ง = 🔔 + แบบอัตโนมัติ + ตกแต่ง */
+export function topLine(r: { title: string; message: string | null; call_text?: string | null }): string {
+  const own = r.call_text?.trim();
+  return own ? clip(own, 300) : `🔔 ${callLine(r)} ⋆. 𐙚 ˚`;
 }
 
 /** ข้อความหลายบรรทัด → แถบอ้างอิง > ทุกบรรทัด */
@@ -129,8 +136,9 @@ export function buildReminderMessage(
 
   const components: unknown[] = [];
   // ข้อความ V2 ใส่ content ไม่ได้ — @ คนไว้เหนือการ์ด ให้แจ้งเตือนเด้งจริง
-  if (r.mention) {
-    components.push({ type: TEXT, content: `${r.mention} 🔔 ${callLine(r)} ⋆. 𐙚 ˚` });
+  // แท็กอยู่หน้าบรรทัดเสมอ ให้เด้งแจ้งเตือน · ไม่มีแท็กแต่ตั้งบรรทัดเองไว้ ก็ยังโชว์
+  if (r.mention || r.call_text?.trim()) {
+    components.push({ type: TEXT, content: [r.mention, topLine(r)].filter(Boolean).join(' ') });
   }
   components.push({ type: CONTAINER, accent_color: accent(settings), components: inner });
 
@@ -248,6 +256,7 @@ export function buildHelpMessage(settings: BotSettings) {
         '• **message** ข้อความในกล่อง',
         '• **channel** ห้องที่จะส่ง *(เว้นว่าง = ห้องนี้)*',
         '• **tag** คน/ยศที่จะแท็ก พิมพ์ `@` แล้วเลือกได้หลายอัน เช่น `@ทีมงาน @ยูมี่` หรือ `@everyone`',
+        '• **call** บรรทัดเหนือการ์ดต่อจากแท็ก เช่น `🔔 ตื่นได้แล้วน้า~ ⋆. 𐙚 ˚` *(เว้นว่าง = "อย่าลืม<ข้อความ> น้า" อัตโนมัติ)*',
       ].join('\n'),
     },
     {
@@ -266,7 +275,7 @@ export function buildHelpMessage(settings: BotSettings) {
         '### 🔘 ปุ่มบนการ์ดแจ้งเตือน',
         '🔔 **รับ / ยกเลิกแจ้งเตือน** — กดรับยศ แล้วบอทจะแท็กคุณทุกรอบ · กดอีกครั้งเพื่อเลิก *(มีเมื่อแจ้งเตือนนั้นแท็กยศ)*',
         '📖 **คำสั่ง & วิธีใช้** — เปิดกล่องนี้',
-        '✏️ **แก้ไข** — เปิดฟอร์มแก้ เรื่อง · ข้อความ · เวลา · วันที่ซ้ำ',
+        '✏️ **แก้ไข** — เปิดฟอร์มแก้ เรื่อง · บรรทัดเรียก · ข้อความ · เวลา · วันที่ซ้ำ',
         '🗑️ **ลบแจ้งเตือนนี้** — ถามยืนยันก่อน ลบแล้วกู้คืนไม่ได้',
         '-# แก้/ลบได้เฉพาะคนที่ตั้งแจ้งเตือนนั้น หรือคนที่มีสิทธิ์ Manage Server',
       ].join('\n'),
