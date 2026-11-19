@@ -20,3 +20,8 @@ DISCORD_PUBLIC_KEY = "aaa55f28882af6ed39cb92cd355344810744fb9f14172285d449d26611
 # ค่าลับตั้งด้วย `npx wrangler secret put <ชื่อ>` (ห้ามใส่ในไฟล์นี้)
 #   DISCORD_TOKEN          bot token
 #   OWNER_IDS              user id ของเจ้าของบอท คั่นด้วยจุลภาค
+
+# ไฟล์ในโฟลเดอร์ public/ เสิร์ฟตรงที่ https://knock-knock.<ชื่อ>.workers.dev/<ไฟล์>
+# (ใช้เป็นลิงก์รูปแบนเนอร์บนการ์ด) — POST จาก Discord ยังเข้า Worker ตามปกติ
+[assets]
+directory = "./public"

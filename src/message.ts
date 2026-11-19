@@ -53,11 +53,15 @@ function linkButton(label: string, url: string, emoji?: string) {
   return { type: BUTTON, style: LINK_STYLE, label, url, ...(emoji ? { emoji: { name: emoji } } : {}) };
 }
 
-/** ●●○ แสดงว่าถึงรอบที่เท่าไรของวัน */
+/** 💜💜🤍 แสดงว่าถึงรอบที่เท่าไรของวัน */
 export function roundDots(round: number, total: number): string {
   if (total < 2 || total > 12) return '';
-  return '●'.repeat(round) + '○'.repeat(Math.max(0, total - round));
+  return '💜'.repeat(round) + '🤍'.repeat(Math.max(0, total - round));
 }
+
+// อักษรตกแต่งน่ารัก ๆ ใช้ร่วมทุกการ์ด
+const BUNNY = '₍ᐢ. .ᐢ₎';
+const DIVIDER = '⋆｡ﾟ☁︎｡⋆｡ ﾟ☾ ﾟ｡⋆｡ﾟ☁︎｡⋆';
 
 export function buildReminderMessage(
   r: ReminderView,
@@ -68,13 +72,9 @@ export function buildReminderMessage(
 ) {
   const inner: unknown[] = [];
 
-  if (ad && isHttpUrl(ad.image_url)) {
-    inner.push({ type: MEDIA_GALLERY, items: [{ media: { url: ad.image_url }, description: ad.label ?? undefined }] });
-  }
-
   inner.push({
     type: TEXT,
-    content: `-# 🔔 KNOCK KNOCK · แจ้งเตือนประจำวัน\n## ${clip(r.title, 100)}`,
+    content: `-# ⋆｡˚ 🔔 KNOCK KNOCK · แจ้งเตือนประจำวัน ˚｡⋆\n## ₊˚⊹ ${clip(r.title, 100)} ⊹˚₊`,
   });
 
   if (r.message?.trim()) {
@@ -84,37 +84,40 @@ export function buildReminderMessage(
 
   const dots = roundDots(slot.round, slot.total);
   const fields = [
-    `⏰ **เวลา** \`${slot.hm} น.\``,
-    slot.total > 1 ? `🔁 **รอบ** \`${slot.round}/${slot.total}\` ของวันนี้ ${dots}` : null,
-    `📅 **ซ้ำ** \`${formatDays(r.days)}\``,
-    r.mention ? `🏷️ **แท็ก** ${r.mention}` : null,
-    `👤 **ตั้งโดย** <@${r.created_by}>`,
+    `⏰ **เวลา** ⊹ \`${slot.hm} น.\``,
+    slot.total > 1 ? `🔁 **รอบ** ⊹ \`${slot.round}/${slot.total}\` ของวันนี้ ${dots}` : null,
+    `📅 **ซ้ำ** ⊹ \`${formatDays(r.days)}\``,
+    r.mention ? `🏷️ **แท็ก** ⊹ ${r.mention}` : null,
+    `👤 **ตั้งโดย** ⊹ <@${r.created_by}>`,
   ].filter(Boolean);
   inner.push({ type: SEPARATOR, divider: false, spacing: 1 });
   inner.push({ type: TEXT, content: fields.join('\n') });
   // <t:…:F> = Discord แปลงเป็นวันเวลาตามภาษา/เขตเวลาของคนอ่านเอง
-  inner.push({ type: TEXT, content: `-# 🗓️ <t:${Math.floor(now.getTime() / 1000)}:F>` });
+  inner.push({ type: TEXT, content: `-# 🗓️ <t:${Math.floor(now.getTime() / 1000)}:F> ⋆˚✿˖°` });
 
+  inner.push({ type: SEPARATOR, divider: true, spacing: 1 });
+
+  // แบนเนอร์อยู่ระหว่างข้อความกับปุ่ม
+  if (ad && isHttpUrl(ad.image_url)) {
+    inner.push({ type: MEDIA_GALLERY, items: [{ media: { url: ad.image_url }, description: ad.label ?? undefined }] });
+    inner.push({ type: TEXT, content: `-# 📢 โฆษณา${ad.label ? ` ⋆ ${clip(ad.label, 80)}` : ''} ♡` });
+  }
+
+  // ปุ่มทั้งหมดแถวเดียว (สูงสุด 5): รับยศ · วิธีใช้ · Donate · ติดต่อ · ลิงก์โฆษณา
   const buttons: unknown[] = [];
   const roleBtn = roleButton(r);
   if (roleBtn) buttons.push(roleBtn);
-  if (isHttpUrl(settings.donate_url)) buttons.push(linkButton('Donate', settings.donate_url, '💖'));
-  if (isHttpUrl(settings.contact_url)) buttons.push(linkButton('ติดต่อ', settings.contact_url, '📩'));
   buttons.push(HELP_BUTTON);
-  inner.push({ type: SEPARATOR, divider: true, spacing: 1 });
+  if (isHttpUrl(settings.donate_url)) buttons.push(linkButton('Donate', settings.donate_url, '💖'));
+  if (isHttpUrl(settings.contact_url)) buttons.push(linkButton('ติดต่อ', settings.contact_url, '💌'));
+  if (ad && isHttpUrl(ad.link_url)) buttons.push(linkButton(clip(ad.label || 'ดูเพิ่มเติม', 80), ad.link_url, '✨'));
   inner.push({ type: ACTION_ROW, components: buttons });
-
-  if (ad) {
-    inner.push({ type: SEPARATOR, divider: true, spacing: 1 });
-    inner.push({ type: TEXT, content: `-# โฆษณา${ad.label ? ` · ${clip(ad.label, 80)}` : ''}` });
-    if (isHttpUrl(ad.link_url)) {
-      inner.push({ type: ACTION_ROW, components: [linkButton(clip(ad.label || 'ดูเพิ่มเติม', 80), ad.link_url, '✨')] });
-    }
-  }
 
   const components: unknown[] = [];
   // ข้อความ V2 ใส่ content ไม่ได้ — @ คนไว้เหนือการ์ด ให้แจ้งเตือนเด้งจริง
-  if (r.mention) components.push({ type: TEXT, content: `${r.mention} ถึงเวลา **${clip(r.title, 100)}** แล้ว!` });
+  if (r.mention) {
+    components.push({ type: TEXT, content: `${r.mention} ✧ ถึงเวลา **${clip(r.title, 100)}** แล้วน้า ${BUNNY} 🔔` });
+  }
   components.push({ type: CONTAINER, accent_color: accent(settings), components: inner });
 
   return {
@@ -182,16 +185,16 @@ export function buildRolePanel(r: ReminderView & { times: string[] }, settings: 
         type: CONTAINER,
         accent_color: accent(settings),
         components: [
-          { type: TEXT, content: `-# 🔔 KNOCK KNOCK · รับแจ้งเตือน\n## ${clip(r.title, 100)}` },
+          { type: TEXT, content: `-# ⋆｡˚ 🔔 KNOCK KNOCK · รับแจ้งเตือน ˚｡⋆\n## ₊˚⊹ ${clip(r.title, 100)} ⊹˚₊` },
           {
             type: TEXT,
             content: [
-              `กดปุ่มด้านล่างเพื่อรับยศ ${roles.join(' ')} แล้วบอทจะแท็กคุณทุกครั้งที่ถึงเวลา`,
-              'กดอีกครั้งเพื่อยกเลิก',
+              `กดปุ่มด้านล่างเพื่อรับยศ ${roles.join(' ')} แล้วบอทจะแท็กคุณทุกครั้งที่ถึงเวลา ${BUNNY}`,
+              'กดอีกครั้งเพื่อยกเลิก ♡',
+              DIVIDER,
             ].join('\n'),
           },
-          { type: SEPARATOR, divider: false, spacing: 1 },
-          { type: TEXT, content: `⏰ **เวลา** \`${r.times.join(' · ')}\`\n📅 **ซ้ำ** \`${formatDays(r.days)}\`` },
+          { type: TEXT, content: `⏰ **เวลา** ⊹ \`${r.times.join(' · ')}\`\n📅 **ซ้ำ** ⊹ \`${formatDays(r.days)}\`` },
           ...(btn ? [{ type: ACTION_ROW, components: [btn, HELP_BUTTON] }] : []),
         ],
       },
@@ -204,12 +207,15 @@ export function buildRolePanel(r: ReminderView & { times: string[] }, settings: 
 
 export const HELP_CUSTOM_ID = 'kk:help';
 
-const HELP_BUTTON = { type: BUTTON, style: 2, label: 'คำสั่ง & วิธีใช้', custom_id: HELP_CUSTOM_ID, emoji: { name: '📖' } };
+const HELP_BUTTON = { type: BUTTON, style: 1, label: 'คำสั่ง & วิธีใช้', custom_id: HELP_CUSTOM_ID, emoji: { name: '📖' } };
 
 /** กล่องสอนการใช้งาน (เห็นคนเดียว) — ใช้ทั้งตอนกดปุ่มและ /remind help */
 export function buildHelpMessage(settings: BotSettings) {
   const inner: unknown[] = [
-    { type: TEXT, content: '## 📖 วิธีใช้ knock-knock\nบอทแจ้งเตือนประจำวัน ตั้งเวลา จำนวนรอบ วันที่ซ้ำ และแท็กคน/ยศได้' },
+    {
+      type: TEXT,
+      content: `## 📖 วิธีใช้ knock-knock ${BUNNY}\nบอทแจ้งเตือนประจำวัน ตั้งเวลา จำนวนรอบ วันที่ซ้ำ และแท็กคน/ยศได้ ♡`,
+    },
     { type: SEPARATOR, divider: true, spacing: 1 },
     {
       type: TEXT,

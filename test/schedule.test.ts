@@ -156,9 +156,9 @@ describe('message', () => {
     const json = JSON.stringify(msg);
     expect(json).toContain('https://x/a.png');
     expect(json).toContain('`2/3`');
-    expect(json).toContain('●●○');
+    expect(json).toContain('💜💜🤍');
     expect(json).toContain('https://donate');
     expect(json).toContain('https://contact');
-    expect(msg.components[0]).toEqual({ type: 10, content: '<@&9> ถึงเวลา **ส่งรายงาน** แล้ว!' });
+    expect(msg.components[0]).toEqual({ type: 10, content: '<@&9> ✧ ถึงเวลา **ส่งรายงาน** แล้วน้า ₍ᐢ. .ᐢ₎ 🔔' });
   });
 });
